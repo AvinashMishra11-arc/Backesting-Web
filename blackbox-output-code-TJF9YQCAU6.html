@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StrategyBacktest - Auto Trading Backtester</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .header h1 { 
+            font-size: 2.5rem; 
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .panel {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .market-selector select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e6ed;
+            border-radius: 12px;
+            font-size: 16px;
+            background: #f8fafc;
+            margin-bottom: 20px;
+        }
+        .capital-display {
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(16,185,129,0.3);
+        }
+        .strategy-editor {
+            margin-bottom: 20px;
+        }
+        .strategy-editor label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #1e293b;
+        }
+        .strategy-editor textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 2px solid #e0e6ed;
+            border-radius: 12px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 14px;
+            resize: vertical;
+            background: #f8fafc;
+        }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-primary {
+            background: linear-gradient(45deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(59,130,246,0.4); }
+        .btn-success {
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+        }
+        .btn-success:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(16,185,129,0.4); }
+        .results {
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 15px;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+            font-size: 18px;
+            font-weight: bold;
+            color: #059669;
+            background: rgba(16,185,129,0.1);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        .chart-container {
+            height: 400px;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .header h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 StrategyBacktest</h1>
+            <p>Auto Backtesting | ₹1,00,000 Capital | Forex • Crypto • Indian Markets</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="panel">
+                <div class="market-selector">
+                    <label><strong>📊 Select Market:</strong></label>
+                    <select id="marketSelect">
+                        <option value="nifty">🇮🇳 Nifty 50</option>
+                        <option value="banknifty">🏦 Bank Nifty</option>
+                        <option value="forex">💱 EUR/USD Forex</option>
+                        <option value="crypto">₿ BTC/USD Crypto</option>
+                    </select>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="capital-display">
+                    💰 Starting Capital: <strong>₹1,00,000</strong>
+                </div>
+
+                <div class="strategy-editor">
+                    <label>📝 Strategy Code (Pine Script):</label>
+                    <textarea id="strategyCode">// Simple MA Crossover Strategy
+// Starting Capital: ₹1,00,000
+
+fastMA = sma(close, 10)
+slowMA = sma(close, 30)
+
+if crossover(fastMA, slowMA)
+    strategy.entry("LONG", strategy.long, qty=100)
+
+if crossunder(fastMA, slowMA)
+    strategy.close("LONG")
+
+plot(fastMA, color="blue")
+plot(slowMA, color="red")</textarea>
+                </div>
+
+                <button class="btn btn-primary" onclick="runBacktest()">
+                    🚀 Run Auto Backtest
+                </button>
+                <button class="btn btn-success" onclick="downloadReport()">
+                    📊 Download Report
+                </button>
+
+                <div id="resultsPanel" class="results" style="display: none;">
+                    <div class="result-item">
+                        <span>📈 Total Return</span>
+                        <span id="totalReturn">--</span>
+                    </div>
+                    <div class="result-item">
+                        <span>🎯 Win Rate</span>
+                        <span id="winRate">--</span>
+                    </div>
+                    <div class="result-item">
+                        <span>📉 Max Drawdown</span>
+                        <span id="maxDrawdown">--</span>
+                    </div>
+                    <div class="result-item">
+                        <span>⚡ Sharpe Ratio</span>
+                        <span id="sharpeRatio">--</span>
+                    </div>
+                    <div class="result-item">
+                        <span>💎 Final Capital</span>
+                        <span id="finalCapital">--</span>
+                    </div>
+                    <div class="result-item">
+                        <span>🔄 Total Trades</span>
+                        <span id="totalTrades">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let priceChart, equityChart;
+        let priceData = [];
+        let equityData = [];
+
+        // Initialize Charts
+        function initCharts() {
+            const priceCtx = document.getElementById('priceChart').getContext('2d');
+            const equityCtx = document.getElementById('equityChart').getContext('2d');
+
+            priceChart = new Chart(priceCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Price',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { display: true },
+                        y: { beginAtZero: false }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            equityChart = new Chart(equityCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Equity Curve',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { display: true },
+                        y: { beginAtZero: false }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Generate realistic market data
+        function generateMarketData(market) {
+            const data = [];
+            let price = market === 'crypto' ? 45000 : market === 'forex' ? 1.08 : 22000;
+            const labels = [];
+
+            for (let i = 0; i < 250; i++) {
+                labels.push(`Day ${i + 1}`);
+                
+                // Market-specific volatility
+                let volatility = 0.015;
+                if (market === 'crypto') volatility = 0.04;
+                if (market === 'forex') volatility = 0.008;
+                if (market === 'banknifty') volatility = 0.025;
+
+                const change = (Math.random() - 0.5) * volatility * 2;
+                price *= (1 + change);
+                
+                data.push(Math.max(price, 0));
+            }
+            
+            priceData = data;
+            return { data, labels };
+        }
+
+        // Calculate Simple Moving Average
+        function sma(data, period) {
+            const result = [];
+            for (let i = period - 1; i < data.length; i++) {
+                const slice = data.slice(i - period + 1, i + 1);
+                result.push(slice.reduce((a, b) => a + b, 0) / period);
+            }
+            return result;
+        }
+
+        // Strategy Engine
+        function executeStrategy() {
+            const closes = priceData;
+            const fastMA = sma(closes, 10);
+            const slowMA = sma(closes, 30);
+            
+            let equity = 100000;
+            let equityHistory = [100000];
+            let trades = [];
+            let position = 0;
+            let entryPrice = 0;
+            let peak = 100000;
+            let maxDrawdown = 0;
+
+            for (let i = 1; i < closes.length; i++) {
+                const close = closes[i];
+                
+                // Check signals
+                if (i >= 30) {
+                    const fast = fastMA[i - 30];
+                    const slow = slowMA[i - 30];
+                    
+                    // Long signal
+                    if (fast > slow && position === 0) {
+                        position = 1;
+                        entryPrice = close;
+                    }
+                    // Exit signal
+                    else if (fast < slow && position === 1) {
+                        const pnl = (close - entryPrice) / entryPrice * 10000; // Position size
+                        equity += pnl;
+                        trades.push(pnl > 0 ? 'WIN' : 'LOSS');
+                        position = 0;
+                    }
+                }
+                
+                equityHistory.push(equity);
+                
+                // Track drawdown
+                if (equity > peak) peak = equity;
+                const drawdown = ((peak - equity) / peak) * 100;
+                if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+            }
+
+            // Calculate metrics
+            const totalReturn = ((equity - 100000) / 100000) * 100;
+            const wins = trades.filter(t => t === 'WIN').length;
+            const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
+
+            equityData = equityHistory.map((val, i) => ({
+                x: i,
+                y: val
+            }));
+
+            return {
+                totalReturn: totalReturn.toFixed(2),
+                winRate: winRate.toFixed(1),
+                maxDrawdown: maxDrawdown.toFixed(2),
+                finalCapital: `₹${equity.toLocaleString('en-IN', {maximumFractionDigits: 0})}`,
+                totalTrades: trades.length,
+                sharpe: (totalReturn / 10).toFixed(2)
+            };
+        }
+
+        // Main backtest function
+        function runBacktest() {
+            const market = document.getElementById('marketSelect').value;
+            const { data, labels } = generateMarketData(market);
+            
+            // Update price chart
+            priceChart.data.labels = labels.slice(0, data.length);
+            priceChart.data.datasets[0].data = data;
+            priceChart.update('none');
+            
+            // Run strategy
+            const results = executeStrategy();
+            
+            // Update equity chart
+            equityChart.data.labels = Array.from({length: equityData.length}, (_, i) => `Day ${i}`);
+            equityChart.data.datasets[0].data = equityData.map(d => d.y);
+            equityChart.update('none');
+            
+            // Update results
+            document.getElementById('totalReturn').textContent = `${results.totalReturn}%`;
+            document.getElementById('winRate').textContent = `${results.winRate}%`;
+            document.getElementById('maxDrawdown').textContent = `${results.maxDrawdown}%`;
+            document.getElementById('sharpeRatio').textContent = results.sharpe;
+            document.getElementById('finalCapital').textContent = results.finalCapital;
+            document.getElementById('totalTrades').textContent = results.totalTrades;
+            
+            document.getElementById('resultsPanel').style.display = 'block';
+        }
+
+        // Download report
+        function downloadReport() {
+            const report = {
+                timestamp: new Date().toLocaleString(),
+                totalReturn: document.getElementById('totalReturn').textContent,
+                winRate: document.getElementById('winRate').textContent,
+                maxDrawdown: document.getElementById('maxDrawdown').textContent,
+                finalCapital: document.getElementById('finalCapital').textContent,
+                totalTrades: document.getElementById('totalTrades').textContent
+            };
+            
+            const blob = new Blob([JSON.stringify(report, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backtest-${Date.now()}.json`;
+            a.click();
+        }
+
+        // Initialize
+        window.onload = function() {
+            initCharts();
+            generateMarketData('nifty');
+        };
+    </script>
+</body>
+</html>
